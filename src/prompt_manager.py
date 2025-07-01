@@ -32,8 +32,13 @@ class PromptManager:
 Requirements:
 1. Identify the most important **independent ontological concepts** in the cluster
 2. Provide concise and complete descriptions for each ontology
-3. Extract relationships between ontologies, which can connect main ontologies and other concepts
-4. Strictly follow JSON format for output
+3. Extract relationships between ontologies, **especially focus on TYPE relationships** (use unified "is type of" format)
+4. Distinguish between two relationship types: TYPE and OTHER
+5. Strictly follow JSON format for output
+
+Relationship Types:
+- **TYPE**: Hierarchical classification relationships, use unified "is type of" format (e.g., "Dog -> is type of -> Animal")
+- **OTHER**: non-is-a semantic relationships between types (e.g., "Algorithm -> used in -> Machine Learning")
 
 Output format example:
 ```json
@@ -43,17 +48,44 @@ Output format example:
       "name": "Machine Learning",
       "description": "An artificial intelligence technology that enables computer systems to automatically learn and improve through data training algorithms.",
       "relationships": [
-        "Machine Learning -> contains -> Supervised Learning",
-        "Machine Learning -> applies to -> Data Mining",
-        "Algorithm -> used in -> Machine Learning"
+        {{
+          "relation": "Machine Learning -> is type of -> Artificial Intelligence",
+          "type": "TYPE"
+        }},
+        {{
+          "relation": "Machine Learning -> contains -> Supervised Learning",
+          "type": "OTHER"
+        }},
+        {{
+          "relation": "Machine Learning -> contains -> Unsupervised Learning",
+          "type": "OTHER"
+        }},
+        {{
+          "relation": "Machine Learning -> uses -> Training Data",
+          "type": "OTHER"
+        }}
       ]
     }},
     {{
       "name": "Supervised Learning",
       "description": "A branch of machine learning that uses labeled training data to learn mappings from inputs to outputs.",
       "relationships": [
-        "Supervised Learning -> is type of -> Machine Learning",
-        "Training Data -> input to -> Supervised Learning"
+        {{
+          "relation": "Supervised Learning -> is type of -> Machine Learning",
+          "type": "TYPE"
+        }},
+        {{
+          "relation": "Supervised Learning -> requires -> Labeled Data",
+          "type": "OTHER"
+        }},
+        {{
+          "relation": "Supervised Learning -> includes -> Classification",
+          "type": "OTHER"
+        }},
+        {{
+          "relation": "Supervised Learning -> includes -> Regression",
+          "type": "OTHER"
+        }}
       ]
     }}
   ]
@@ -63,7 +95,8 @@ Output format example:
 Notes:
 - Ontology names should be concise and clear
 - Descriptions should be self-contained, not dependent on other ontology definitions
-- Use "Concept A -> Relationship Type -> Concept B" format for relationships
+- **Prioritize extracting TYPE relationships** as they are crucial for ontological hierarchies
+- Use structured relationship format with explicit type classification
 - Relationships can include ontology names or other relevant concepts
 - Ensure JSON format is correct and parseable by programs
 
@@ -91,27 +124,50 @@ Please extract independent ontological concepts:"""
         descriptions_text = "\n".join([f"{i+1}. {desc}" for i, desc in enumerate(descriptions)])
         relationships_text = "\n".join([f"- {rel}" for rel in relationships])
         
-        prompt = f"""Please merge multiple descriptions and relationship information about the ontology "{ontology_name}".
+        prompt = f"""Merge multiple descriptions and relationship information for the ontology "{ontology_name}" into a coherent, comprehensive definition.
 
-**Task Requirements:**
-1. Merge multiple descriptions into one complete, accurate, and concise description
-2. Remove duplicate relationships and preserve unique relationship information
-3. Ensure merged information is consistent and conflict-free
-4. Output in JSON format
+Requirements:
+1. **Description Merging**: Combine multiple descriptions into one complete, accurate, and self-contained definition
+2. **Relationship Deduplication**: Remove duplicate relationships while preserving all unique semantic information
+3. **Type Classification**: Maintain distinction between TYPE relationships (use unified "is type of" format) and OTHER relationships
+4. **Consistency Check**: Ensure merged information is logically consistent and conflict-free
+5. **Completeness**: Preserve all important semantic information from input sources
+6. **Stricty follow JSON format** for output
 
-**Input Descriptions:**
+Merging Strategy:
+- **For Descriptions**: Extract core concepts, combine complementary information, resolve conflicts by choosing more specific/accurate descriptions
+- **For Relationships**: Group by relationship type, eliminate exact duplicates, preserve semantically distinct relationships
+- **Quality Control**: Ensure the merged ontology maintains conceptual clarity and independence
+
+Input Descriptions:
 {descriptions_text}
 
-**Input Relationships:**
+Input Relationships:
 {relationships_text}
 
-**Output Format:**
+Output Format Example:
 ```json
 {{
-  "description": "Complete merged description",
-  "relationships": ["Deduplicated relationship 1", "Deduplicated relationship 2", "..."]
+  "description": "A comprehensive, self-contained description that combines all input descriptions while maintaining clarity and accuracy",
+  "relationships": [
+    {{
+      "relation": "Supervised Learning -> is type of -> Machine Learning",
+      "type": "TYPE"
+    }},
+    {{
+      "relation": "Supervised Learning -> contains -> Classification",
+      "type": "OTHER"
+    }}
+  ]
 }}
 ```
+
+Notes:
+- Merged description should be concise yet complete, not dependent on other definitions
+- **Prioritize preserving TYPE relationships** as they are crucial for ontological hierarchies
+- Use structured relationship format consistent with extraction phase
+- Ensure JSON format is correct and parseable
+- Resolve any semantic conflicts by choosing more accurate or specific information
 
 Please perform the merge:"""
         
