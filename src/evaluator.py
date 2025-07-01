@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime
 import asyncio
+import numpy as np
 from .Evaluation import Evaluator as EvaluationEvaluator
 
 
@@ -44,7 +45,7 @@ class Evaluator:
         Returns:
             Dict: 评估结果
         """
-        self.logger.info(f"Starting evaluation on {len(questions)} questions")
+        self.logger.info(f"[评估] 开始评估 {len(questions)} 个问题")
         
         # 准备数据用于Evaluation.py
         evaluation_data = []
@@ -92,7 +93,7 @@ class Evaluator:
             evaluation_summary['accuracy'] = detailed_metrics['accuracy'] / 100  # 转换为0-1范围
             evaluation_summary['correct_answers'] = int(detailed_metrics['accuracy'] * len(questions) / 100)
         
-        self.logger.info(f"Evaluation completed. Detailed metrics: {detailed_metrics}")
+        self.logger.info(f"[评估] 评估完成，详细指标: {detailed_metrics}")
         
         return evaluation_summary
     
@@ -106,13 +107,13 @@ class Evaluator:
         Returns:
             List[Dict[str, Any]]: 评估数据列表
         """
-        self.logger.info(f"Running batch zeroshot evaluation on {len(questions)} questions")
+        self.logger.info(f"[评估] 执行zero-shot批量评估，{len(questions)} 个问题")
         
         # 提取问题文本
         question_texts = [q.get('question', '') for q in questions]
         
         # 使用zeroshot_qa的批量处理方法
-        self.logger.info("Calling ZeroshotQA batch processing...")
+        self.logger.info("[评估] 调用ZeroshotQA批量处理...")
         qa_results = self.zeroshot_qa.answer_questions_batch(question_texts)
         
         # 构建评估数据
@@ -131,9 +132,9 @@ class Evaluator:
             
             # 每100个问题记录一次进度
             if (i + 1) % 100 == 0:
-                self.logger.info(f"Processed {i+1}/{len(questions)} questions")
+                self.logger.info(f"[评估] 已处理 {i+1}/{len(questions)} 个问题")
         
-        self.logger.info(f"Completed batch processing of {len(questions)} questions")
+        self.logger.info(f"[评估] 完成zero-shot批量处理 {len(questions)} 个问题")
         return evaluation_data
     
     def _evaluate_rag_batch(self, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -146,13 +147,13 @@ class Evaluator:
         Returns:
             List[Dict[str, Any]]: 评估数据列表
         """
-        self.logger.info(f"Running batch RAG evaluation on {len(questions)} questions")
+        self.logger.info(f"[评估] 执行RAG批量评估，{len(questions)} 个问题")
         
         # 提取问题文本
         question_texts = [q.get('question', '') for q in questions]
         
         # 使用rag_system的批量处理方法
-        self.logger.info("Calling RAG system batch processing...")
+        self.logger.info("[评估] 调用RAG系统批量处理...")
         qa_results = self.rag_system.answer_questions_batch(question_texts)
         
         # 构建评估数据
@@ -171,9 +172,9 @@ class Evaluator:
             
             # 每100个问题记录一次进度
             if (i + 1) % 100 == 0:
-                self.logger.info(f"Processed {i+1}/{len(questions)} questions")
+                self.logger.info(f"[评估] 已处理 {i+1}/{len(questions)} 个问题")
         
-        self.logger.info(f"Completed batch processing of {len(questions)} questions")
+        self.logger.info(f"[评估] 完成RAG批量处理 {len(questions)} 个问题")
         return evaluation_data
     
     def _run_detailed_evaluation(self, evaluation_data: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -189,12 +190,16 @@ class Evaluator:
         try:
             # 创建临时JSON Lines文件
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            temp_file = Path(f"temp_eval_{timestamp}.jsonl")
+            temp_dir = Path("cache/temp_eval")
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            temp_file = temp_dir / f"temp_eval_{timestamp}.jsonl"
             
             # 写入数据到临时文件
             with open(temp_file, 'w', encoding='utf-8') as f:
                 for item in evaluation_data:
-                    f.write(json.dumps(item, ensure_ascii=False) + '\n')
+                    # 转换numpy类型以避免JSON序列化错误
+                    item_cleaned = self._clean_numpy_types(item)
+                    f.write(json.dumps(item_cleaned, ensure_ascii=False) + '\n')
             
             # 创建Evaluation.py的评估器
             eval_evaluator = EvaluationEvaluator(str(temp_file), "musique")
@@ -213,7 +218,7 @@ class Evaluator:
                     result_dict = asyncio.run(eval_evaluator.evaluate())
             except Exception as e:
                 # 如果异步运行失败，使用同步评估
-                self.logger.warning(f"Async evaluation failed, using sync: {e}")
+                self.logger.warning(f"[评估] 异步评估失败，使用同步: {e}")
                 import pandas as pd
                 df = pd.read_json(temp_file, lines=True)
                 result_dict, _ = eval_evaluator.short_eval(df)
@@ -225,7 +230,7 @@ class Evaluator:
             return result_dict
             
         except Exception as e:
-            self.logger.error(f"Detailed evaluation failed: {e}")
+            self.logger.error(f"[评估] 详细评估失败: {e}")
             # 返回简化评估结果
             return self._simple_evaluation_fallback(evaluation_data)
     
@@ -267,11 +272,70 @@ class Evaluator:
         Returns:
             bool: 是否正确
         """
-        # 简化的评估逻辑：检查期望答案是否在生成答案中
         if not expected_answer or not generated_answer:
             return False
         
-        return expected_answer.lower() in generated_answer.lower()
+        # 标准化答案进行比较
+        import re
+        import string
+        
+        def normalize_answer(s):
+            """标准化答案"""
+            # 移除标点符号
+            s = re.sub(f"[{re.escape(string.punctuation)}]", " ", s)
+            # 转换为小写并移除多余空格
+            s = " ".join(s.lower().split())
+            return s
+        
+        norm_generated = normalize_answer(generated_answer)
+        norm_expected = normalize_answer(expected_answer)
+        
+        # 双向包含检查
+        if norm_expected in norm_generated or norm_generated in norm_expected:
+            return True
+        
+        # 处理连字符连接的词（如 "fifth-largest" vs "fifth largest"）
+        if '-' in expected_answer:
+            expected_parts = [p.strip() for p in expected_answer.split('-')]
+            if len(expected_parts) <= 3:
+                # 检查所有部分是否都在生成答案中
+                all_found = all(normalize_answer(part) in norm_generated for part in expected_parts if part)
+                if all_found:
+                    return True
+        
+        # 处理数字范围（如 "18 - 20" vs "18 years old"）
+        if ' - ' in expected_answer or '–' in expected_answer:
+            range_parts = re.split(r'\s*[-–]\s*', expected_answer)
+            if len(range_parts) == 2:
+                # 检查范围的任一端点是否在答案中
+                for part in range_parts:
+                    if normalize_answer(part.strip()) in norm_generated:
+                        return True
+        
+        return False
+    
+    def _clean_numpy_types(self, obj):
+        """
+        递归清理numpy类型，转换为Python原生类型
+        
+        Args:
+            obj: 需要清理的对象
+            
+        Returns:
+            清理后的对象
+        """
+        if isinstance(obj, dict):
+            return {key: self._clean_numpy_types(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._clean_numpy_types(item) for item in obj]
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return obj
     
     def save_results(self, results: Dict[str, Any], output_dir: Path):
         """
@@ -365,7 +429,7 @@ class Evaluator:
             general_config = results['config_info']['general_config']
             f.write(f"Questions Path: {general_config['questions_path']}\n")
         
-        self.logger.info(f"Results saved to {output_dir}")
+        self.logger.info(f"[评估] 结果已保存到 {output_dir}")
         
         return results_file, summary_file
     
@@ -393,7 +457,7 @@ class Evaluator:
                 if corpus_path:
                     return self._extract_dataset_name_from_path(corpus_path)
         except Exception as e:
-            self.logger.warning(f"Failed to extract dataset name from config: {e}")
+            self.logger.warning(f"[评估] 无法从配置提取数据集名称: {e}")
         
         return 'unknown'
     

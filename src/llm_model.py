@@ -50,7 +50,7 @@ class LLMModel:
         self.retry_backoff = self.config.get('retry_backoff', 2.0)  # 退避倍数
         self.retry_jitter = self.config.get('retry_jitter', True)  # 是否添加随机抖动
         
-        self.logger.info(f"Initialized LLM model: {self.model} ({llm_type})")
+        self.logger.info(f"[LLM模型] 初始化完成: {self.model} ({llm_type})")
     
     def _should_retry(self, error: Exception) -> bool:
         """
@@ -67,10 +67,10 @@ class LLMModel:
         elif isinstance(error, requests.exceptions.ConnectionError):
             return True
         elif isinstance(error, requests.exceptions.HTTPError):
-            # 对于HTTP错误，只重试5xx服务器错误和429 Too Many Requests
+            # 对于HTTP错误，重试5xx服务器错误、429 Too Many Requests、400 Bad Request和401 Unauthorized
             if hasattr(error, 'response') and error.response is not None:
                 status_code = error.response.status_code
-                return status_code >= 500 or status_code == 429
+                return status_code >= 500 or status_code == 429 or status_code == 400 or status_code == 401
             return False
         elif isinstance(error, (json.JSONDecodeError, KeyError)):
             # 响应格式错误通常不应该重试，可能是API版本不兼容
@@ -128,7 +128,7 @@ class LLMModel:
                     f"{self.api_url}/chat/completions",
                     headers=headers,
                     json=data,
-                    timeout=30
+                    timeout=120
                 )
                 response.raise_for_status()
                 
@@ -148,54 +148,54 @@ class LLMModel:
                 
                 # 成功返回
                 if attempt > 0:
-                    self.logger.info(f"API call succeeded after {attempt} retries")
+                    self.logger.info(f"[LLM模型] API调用在 {attempt} 次重试后成功")
                 
                 return content
                 
             except requests.exceptions.Timeout as e:
                 last_error = e
-                error_msg = f"API request timeout after 30s"
-                self.logger.warning(f"Attempt {attempt + 1}: {error_msg}")
+                error_msg = f"API请求超时120秒"
+                self.logger.warning(f"[LLM模型] 第{attempt + 1}次尝试: {error_msg}")
                 
             except requests.exceptions.ConnectionError as e:
                 last_error = e
-                error_msg = f"API connection error: {str(e)}"
-                self.logger.warning(f"Attempt {attempt + 1}: {error_msg}")
+                error_msg = f"API连接错误: {str(e)}"
+                self.logger.warning(f"[LLM模型] 第{attempt + 1}次尝试: {error_msg}")
                 
             except requests.exceptions.HTTPError as e:
                 last_error = e
                 status_code = e.response.status_code if e.response else 'unknown'
                 response_text = e.response.text if e.response else 'no response'
-                error_msg = f"API HTTP error {status_code}: {response_text}"
-                self.logger.warning(f"Attempt {attempt + 1}: {error_msg}")
+                error_msg = f"API HTTP错误 {status_code}: {response_text}"
+                self.logger.warning(f"[LLM模型] 第{attempt + 1}次尝试: {error_msg}")
                 
             except requests.exceptions.RequestException as e:
                 last_error = e
-                error_msg = f"API request error: {str(e)}"
-                self.logger.warning(f"Attempt {attempt + 1}: {error_msg}")
+                error_msg = f"API请求错误: {str(e)}"
+                self.logger.warning(f"[LLM模型] 第{attempt + 1}次尝试: {error_msg}")
                 
             except (json.JSONDecodeError, ValueError, KeyError) as e:
                 last_error = e
-                error_msg = f"API response format error: {str(e)}"
-                self.logger.error(f"Attempt {attempt + 1}: {error_msg}")
+                error_msg = f"API响应格式错误: {str(e)}"
+                self.logger.error(f"[LLM模型] 第{attempt + 1}次尝试: {error_msg}")
                 # 响应格式错误通常不需要重试
                 if not self._should_retry(e):
                     break
             
             # 检查是否应该重试
             if not self._should_retry(last_error):
-                self.logger.error(f"Error not retryable, aborting: {last_error}")
+                self.logger.error(f"[LLM模型] 错误不可重试，放弃: {last_error}")
                 break
                 
             # 如果不是最后一次尝试，等待后重试
             if attempt < self.max_retries:
                 delay = self._get_retry_delay(attempt)
-                self.logger.info(f"Retrying in {delay:.2f} seconds... (attempt {attempt + 1}/{self.max_retries})")
+                self.logger.info(f"[LLM模型] {delay:.2f}秒后重试... (第{attempt + 1}/{self.max_retries}次)")
                 time.sleep(delay)
         
         # 所有重试都失败了
-        error_msg = f"API call failed after {self.max_retries + 1} attempts. Last error: {last_error}"
-        self.logger.error(error_msg)
+        error_msg = f"API调用在{self.max_retries + 1}次尝试后失败。最后错误: {last_error}"
+        self.logger.error(f"[LLM模型] {error_msg}")
         raise RuntimeError(error_msg) from last_error
     
     def generate_single(self, prompt: str, system_prompt: str = None, **kwargs) -> str:
@@ -242,7 +242,7 @@ class LLMModel:
         
         results = [None] * len(prompts)
         
-        self.logger.info(f"Processing {len(prompts)} prompts with {self.max_workers} workers")
+        self.logger.info(f"[LLM模型] 使用 {self.max_workers} 个工作线程处理 {len(prompts)} 个提示")
         
         def process_prompt(idx_prompt):
             idx, prompt = idx_prompt
@@ -263,7 +263,7 @@ class LLMModel:
                 result = self._call_api(messages, **kwargs)
                 return idx, result
             except Exception as e:
-                self.logger.error(f"Error processing prompt {idx}: {e}")
+                self.logger.error(f"[LLM模型] 处理提示 {idx} 失败: {e}")
                 return idx, f"Error: {str(e)}"
         
         # 使用线程池并行处理
@@ -275,7 +275,7 @@ class LLMModel:
                     idx, result = future.result()
                     results[idx] = result
                 except Exception as e:
-                    self.logger.error(f"Future processing failed: {e}")
+                    self.logger.error(f"[LLM模型] Future处理失败: {e}")
         
         return results
     

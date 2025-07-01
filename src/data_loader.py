@@ -32,13 +32,13 @@ class DataLoader:
         if not corpus_path.exists():
             raise FileNotFoundError(f"Corpus file not found: {corpus_path}")
         
-        self.logger.info(f"Loading corpus from {corpus_path}")
+        self.logger.info(f"[数据加载] 从 {corpus_path} 加载语料库")
         
         with open(corpus_path, 'r', encoding='utf-8') as f:
             content = f.read().strip()
             
         if not content:
-            self.logger.warning("Empty corpus file")
+            self.logger.warning("[数据加载] 语料库文件为空")
             return []
         
         corpus = []
@@ -57,7 +57,7 @@ class DataLoader:
                 
         except json.JSONDecodeError:
             # 如果单个JSON解析失败，尝试JSONL格式（逐行JSON）
-            self.logger.info("Single JSON parsing failed, trying JSONL format...")
+            self.logger.info("[数据加载] 单个JSON解析失败，尝试JSONL格式...")
             
             for line_num, line in enumerate(content.split('\n'), 1):
                 line = line.strip()
@@ -66,8 +66,8 @@ class DataLoader:
                         item = json.loads(line)
                         corpus.append(item)
                     except json.JSONDecodeError as e:
-                        self.logger.error(f"JSON parsing error at line {line_num}: {e}")
-                        self.logger.error(f"Problematic line: {line[:100]}...")
+                        self.logger.error(f"[数据加载] 第{line_num}行JSON解析错误: {e}")
+                        self.logger.error(f"[数据加载] 问题行: {line[:100]}...")
                         raise ValueError(f"Invalid JSON format at line {line_num}: {str(e)}")
         
         if not corpus:
@@ -78,7 +78,7 @@ class DataLoader:
             if not isinstance(doc, dict):
                 raise ValueError(f"Document {i} is not a dictionary: {type(doc)}")
         
-        self.logger.info(f"Loaded {len(corpus)} documents")
+        self.logger.info(f"[数据加载] 成功加载 {len(corpus)} 个文档")
         return corpus
     
     def load_questions(self, questions_path: str) -> List[Dict[str, Any]]:
@@ -96,13 +96,13 @@ class DataLoader:
         if not questions_path.exists():
             raise FileNotFoundError(f"Questions file not found: {questions_path}")
         
-        self.logger.info(f"Loading questions from {questions_path}")
+        self.logger.info(f"[数据加载] 从 {questions_path} 加载问题")
         
         with open(questions_path, 'r', encoding='utf-8') as f:
             content = f.read().strip()
             
         if not content:
-            self.logger.warning("Empty questions file")
+            self.logger.warning("[数据加载] 问题文件为空")
             return []
         
         questions = []
@@ -121,7 +121,7 @@ class DataLoader:
                 
         except json.JSONDecodeError:
             # 如果单个JSON解析失败，尝试JSONL格式（逐行JSON）
-            self.logger.info("Single JSON parsing failed, trying JSONL format...")
+            self.logger.info("[数据加载] 单个JSON解析失败，尝试JSONL格式...")
             
             for line_num, line in enumerate(content.split('\n'), 1):
                 line = line.strip()
@@ -130,8 +130,8 @@ class DataLoader:
                         item = json.loads(line)
                         questions.append(item)
                     except json.JSONDecodeError as e:
-                        self.logger.error(f"JSON parsing error at line {line_num}: {e}")
-                        self.logger.error(f"Problematic line: {line[:100]}...")
+                        self.logger.error(f"[数据加载] 第{line_num}行JSON解析错误: {e}")
+                        self.logger.error(f"[数据加载] 问题行: {line[:100]}...")
                         raise ValueError(f"Invalid JSON format at line {line_num}: {str(e)}")
         
         if not questions:
@@ -142,5 +142,5 @@ class DataLoader:
             if not isinstance(question, dict):
                 raise ValueError(f"Question {i} is not a dictionary: {type(question)}")
         
-        self.logger.info(f"Loaded {len(questions)} questions")
+        self.logger.info(f"[数据加载] 成功加载 {len(questions)} 个问题")
         return questions

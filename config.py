@@ -13,12 +13,13 @@ class Config:
     MIOASHU = "测试部分"
     
     # 数据配置
-    DEFAULT_CORPUS_PATH = "datasets/musique/test_corpus_100.json"
-    DEFAULT_QUESTIONS_PATH = "datasets/musique/test_questions_20.json"
+    DATASET = "musique"
+    DEFAULT_CORPUS_PATH = "datasets/"+DATASET+"/Corpus.json"
+    DEFAULT_QUESTIONS_PATH = "datasets/"+DATASET+"/Questions.json"
     
     # 聚类配置
-    DEFAULT_N_CLUSTERS = 5  # 默认聚类数，实际运行时会根据文档数量动态调整为文档数的1/5到1/10
-    
+    DEFAULT_N_CLUSTERS = 5   # 默认聚类数，实际运行时会根据文档数量动态调整为文档数的1/5到1/10
+
     # RAG配置
     DEFAULT_TOP_K = 15
     
@@ -28,7 +29,7 @@ class Config:
     QUESTION_LLM_API_KEY = "sk-d2JVZ12Td33eVv54a5ykpuj2UttHMepiN3P69JRRxwRbSVWL"
     QUESTION_LLM_MODEL = "gpt-4o-mini"
     QUESTION_LLM_MAX_TOKENS = 50
-    QUESTION_LLM_MAX_WORKERS = 15
+    QUESTION_LLM_MAX_WORKERS = 200
     QUESTION_LLM_TEMPERATURE = 1
     QUESTION_LLM_MAX_RETRIES = 200
     QUESTION_LLM_RETRY_DELAY = 1.0
@@ -41,7 +42,7 @@ class Config:
     SUMMARY_LLM_API_KEY = "sk-d2JVZ12Td33eVv54a5ykpuj2UttHMepiN3P69JRRxwRbSVWL"
     SUMMARY_LLM_MODEL = "gpt-4o-mini"
     SUMMARY_LLM_MAX_TOKENS = 2000
-    SUMMARY_LLM_MAX_WORKERS = 15
+    SUMMARY_LLM_MAX_WORKERS = 300
     SUMMARY_LLM_TEMPERATURE = 1
     SUMMARY_LLM_MAX_RETRIES = 200
     SUMMARY_LLM_RETRY_DELAY = 1.0
@@ -56,7 +57,7 @@ class Config:
     EMBEDDING_BATCH_SIZE = 32
     EMBEDDING_MAX_LENGTH = 512
     EMBEDDING_TIMEOUT = 180  # API请求超时时间（秒）
-    EMBEDDING_MAX_WORKERS = 1  # 并行处理的工作线程数
+    EMBEDDING_MAX_WORKERS = 5  # 并行处理的工作线程数
     
     # 输出配置
     DEFAULT_OUTPUT_DIR = "results"

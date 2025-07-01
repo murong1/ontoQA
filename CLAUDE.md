@@ -9,9 +9,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 这是研究项目，不是在线产品开发，不要生成web内容
 - 不要自行添加功能或优化操作，只完成指定任务
 - 保证实验的完整性和最小性，不需要考虑前一版本兼容，直接修改不兼容的代码
-- 没有直接要求，不要写兜底逻辑
+- 没有直接要求，不要写兜底逻辑，请直接抛出错误
 - 所有注释和对话使用中文，代码使用英文
 - 代码修改应确保整体性，测试时使用最新代码
+- 不需要配置安全性和内存优化
 
 ## 数据集
 - 示例语料库：`datasets/musique/test_corpus_100.json`
@@ -31,7 +32,7 @@ python main.py --zeroshot
 python main.py --ablation
 
 # 自定义参数运行
-python main.py --corpus datasets/musique/test_corpus_100.json --questions datasets/musique/test_questions_20.json --clusters 5 --output results
+python main.py --corpus datasets/musique/test_corpus_100.json --questions datasets/musique/test_questions_20.json  --output results
 
 # 启用详细日志
 python main.py --verbose

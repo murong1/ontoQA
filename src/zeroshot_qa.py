@@ -41,7 +41,7 @@ Answer the question using only 3-7 words. Provide only the answer, no explanatio
         try:
             answer = self.llm_model.generate_single(prompt)
         except Exception as e:
-            self.logger.error(f"LLM call failed for zero-shot question: {e}")
+            self.logger.error(f"[Zero-shot] 问题LLM调用失败: {e}")
             answer = f"Error generating answer: {str(e)}"
         
         return {
@@ -65,7 +65,7 @@ Answer the question using only 3-7 words. Provide only the answer, no explanatio
         if not questions:
             return []
             
-        self.logger.info(f"Processing {len(questions)} questions in batch mode")
+        self.logger.info(f"[Zero-shot] 批量处理 {len(questions)} 个问题")
         
         # 构建批量提示词
         prompts = []

@@ -75,24 +75,24 @@ class EmbeddingModel:
         self.local_model = None
         if self.provider == 'local':
             model_name = self.config.get('model_name', 'BAAI/bge-m3')
-            self.logger.info(f"Loading local embedding model from ModelScope: {model_name}")
+            self.logger.info(f"[嵌入模型] 从魔搭社区加载本地模型: {model_name}")
             
             try:
                 # 从魔搭社区下载模型
                 model_dir = snapshot_download('BAAI/bge-m3', cache_dir='./models')
-                self.logger.info(f"Model downloaded to: {model_dir}")
+                self.logger.info(f"[嵌入模型] 模型下载到: {model_dir}")
                 
                 # 使用本地路径加载模型
                 self.local_model = SentenceTransformer(model_dir)
-                self.logger.info(f"Local model loaded successfully from ModelScope")
+                self.logger.info(f"[嵌入模型] 从魔搭社区加载模型成功")
                 
             except Exception as e:
-                self.logger.warning(f"Failed to load from ModelScope: {e}")
-                self.logger.info(f"Falling back to HuggingFace: {model_name}")
+                self.logger.warning(f"[嵌入模型] 从魔搭社区加载失败: {e}")
+                self.logger.info(f"[嵌入模型] 降级使用HuggingFace: {model_name}")
                 self.local_model = SentenceTransformer(model_name)
-                self.logger.info(f"Local model loaded from HuggingFace")
+                self.logger.info(f"[嵌入模型] 从HuggingFace加载模型成功")
         
-        self.logger.info(f"Initialized embedding model: provider={self.provider}, "
+        self.logger.info(f"[嵌入模型] 初始化完成: provider={self.provider}, "
                         f"batch_size={self.batch_size}, max_workers={self.max_workers}, "
                         f"rate_limit={self.rate_limit}, adaptive_batch={self.adaptive_batch}")
     
@@ -162,7 +162,7 @@ class EmbeddingModel:
             self._adaptive_sizes.append(batch_size)
             i += batch_size
         
-        self.logger.info(f"Split {len(texts)} texts into {len(batches)} adaptive batches")
+        self.logger.info(f"[嵌入模型] 将 {len(texts)} 个文本分为 {len(batches)} 个自适应批次")
         return batches
     
     def _call_api_batch_with_retry(self, texts: List[str]) -> List[List[float]]:
@@ -194,7 +194,7 @@ class EmbeddingModel:
                     self._success_count += 1
                     self._total_latency += latency
                 
-                self.logger.debug(f"Batch API call succeeded in {latency:.2f}s")
+                self.logger.debug(f"[嵌入模型] 批量API调用成功，耗时 {latency:.2f}s")
                 return result
                 
             except Exception as e:
@@ -204,11 +204,11 @@ class EmbeddingModel:
                 
                 if attempt < self.max_retries:
                     delay = self.retry_delay * (self.backoff_factor ** attempt)
-                    self.logger.warning(f"Batch API call failed (attempt {attempt + 1}/{self.max_retries + 1}): {e}")
-                    self.logger.info(f"Retrying in {delay:.2f} seconds...")
+                    self.logger.warning(f"[嵌入模型] 批量API调用失败 (第{attempt + 1}/{self.max_retries + 1}次): {e}")
+                    self.logger.info(f"[嵌入模型] {delay:.2f}秒后重试...")
                     time.sleep(delay)
                 else:
-                    self.logger.error(f"Batch API call failed after {self.max_retries + 1} attempts")
+                    self.logger.error(f"[嵌入模型] 批量API调用在{self.max_retries + 1}次尝试后失败")
         
         raise last_exception
     
@@ -315,8 +315,8 @@ class EmbeddingModel:
             return embeddings
             
         except Exception as e:
-            self.logger.error(f"Error extracting embeddings: {e}")
-            self.logger.debug(f"Response structure: {json.dumps(response, indent=2)[:500]}...")
+            self.logger.error(f"[嵌入模型] 提取embedding失败: {e}")
+            self.logger.debug(f"[嵌入模型] 响应结构: {json.dumps(response, indent=2)[:500]}...")
             raise
     
     def encode_batch(self, texts: List[str]) -> np.ndarray:
@@ -340,7 +340,7 @@ class EmbeddingModel:
         
         truncated_texts = [self._truncate_text(text) for text in texts]
         
-        self.logger.info(f"Processing {len(truncated_texts)} texts with adaptive batching")
+        self.logger.info(f"[嵌入模型] 使用自适应批次处理 {len(truncated_texts)} 个文本")
         
         if self.provider == 'api':
             return self._process_batches_with_recovery(truncated_texts)
@@ -385,10 +385,10 @@ class EmbeddingModel:
                 try:
                     batch_embeddings = future.result()
                     batch_results[info['start_pos']] = batch_embeddings
-                    self.logger.debug(f"Completed batch {batch_idx + 1}/{len(batches)} "
-                                    f"(size: {info['batch_size']})")
+                    self.logger.debug(f"[嵌入模型] 完成批次 {batch_idx + 1}/{len(batches)} "
+                                    f"（大小: {info['batch_size']}）")
                 except Exception as e:
-                    self.logger.error(f"Batch {batch_idx + 1} failed permanently: {e}")
+                    self.logger.error(f"[嵌入模型] 批次 {batch_idx + 1} 永久性失败: {e}")
                     failed_batches.append({
                         'batch_idx': batch_idx,
                         'error': str(e),
@@ -397,7 +397,7 @@ class EmbeddingModel:
             
             # 尝试恢复失败的批次
             if failed_batches:
-                self.logger.warning(f"Attempting to recover {len(failed_batches)} failed batches")
+                self.logger.warning(f"[嵌入模型] 尝试恢复 {len(failed_batches)} 个失败批次")
                 recovered_results = self._recover_failed_batches(failed_batches)
                 
                 for start_pos, embeddings in recovered_results.items():
@@ -429,7 +429,7 @@ class EmbeddingModel:
             success_rate = self._success_count / max(self._success_count + self._failure_count, 1)
             avg_latency = self._total_latency / max(self._success_count, 1)
             
-            self.logger.info(f"Completed processing: shape={embeddings_array.shape}, "
+            self.logger.info(f"[嵌入模型] 处理完成: shape={embeddings_array.shape}, "
                            f"success_rate={success_rate:.2%}, avg_latency={avg_latency:.2f}s, "
                            f"adaptive_sizes={self._adaptive_sizes}")
             
@@ -449,7 +449,7 @@ class EmbeddingModel:
         
         for batch_info in failed_batches:
             batch_texts = batch_info['texts']
-            self.logger.info(f"Attempting individual text recovery for batch {batch_info['batch_idx'] + 1}")
+            self.logger.info(f"[嵌入模型] 尝试批次 {batch_info['batch_idx'] + 1} 的单个文本恢复")
             
             individual_embeddings = []
             
@@ -459,9 +459,9 @@ class EmbeddingModel:
                     # 单个文本重试
                     single_embedding = self._call_api_batch_with_retry([text])
                     individual_embeddings.extend(single_embedding)
-                    self.logger.debug(f"Recovered text {i + 1}/{len(batch_texts)}")
+                    self.logger.debug(f"[嵌入模型] 恢复文本 {i + 1}/{len(batch_texts)}")
                 except Exception as e:
-                    self.logger.error(f"Failed to recover individual text {i + 1}: {e}")
+                    self.logger.error(f"[嵌入模型] 恢复文本 {i + 1} 失败: {e}")
                     # 对于完全失败的文本，可以考虑使用零向量或跳过
                     raise RuntimeError(f"Unable to recover text: {text[:100]}...")
             
@@ -470,7 +470,7 @@ class EmbeddingModel:
                           for j in range(batch_info['batch_idx']))
             
             recovered_results[start_pos] = individual_embeddings
-            self.logger.info(f"Successfully recovered batch {batch_info['batch_idx'] + 1}")
+            self.logger.info(f"[嵌入模型] 成功恢复批次 {batch_info['batch_idx'] + 1}")
         
         return recovered_results
     
@@ -487,7 +487,7 @@ class EmbeddingModel:
         if self.local_model is None:
             raise RuntimeError("Local model not initialized")
         
-        self.logger.info(f"Processing {len(texts)} texts with local model")
+        self.logger.info(f"[嵌入模型] 使用本地模型处理 {len(texts)} 个文本")
         
         try:
             start_time = time.time()
@@ -508,7 +508,7 @@ class EmbeddingModel:
                 self._success_count += 1
                 self._total_latency += latency
             
-            self.logger.info(f"Local processing completed: shape={embeddings.shape}, "
+            self.logger.info(f"[嵌入模型] 本地处理完成: shape={embeddings.shape}, "
                            f"time={latency:.2f}s, avg_time_per_text={latency/len(texts):.4f}s")
             
             return embeddings
@@ -516,7 +516,7 @@ class EmbeddingModel:
         except Exception as e:
             with self._result_lock:
                 self._failure_count += 1
-            self.logger.error(f"Local model processing failed: {e}")
+            self.logger.error(f"[嵌入模型] 本地模型处理失败: {e}")
             raise
     
     def encode_single(self, text: str) -> np.ndarray:
