@@ -11,7 +11,7 @@ import numpy as np
 from typing import List, Dict, Any
 from collections import defaultdict
 from .embedding_model import EmbeddingModel
-from .ontology_config import OntologyConfig
+from config import Config
 
 
 class OntologyDeduplicator:
@@ -130,7 +130,7 @@ class OntologyDeduplicator:
                 
                 similarity = self._calculate_similarity(embeddings[i], embeddings[j])
                 
-                if similarity > OntologyConfig.SIMILARITY_THRESHOLD:
+                if similarity > Config.SIMILARITY_THRESHOLD:
                     current_semantic_group.extend(ontology_groups[j])  # 添加第j组的所有本体
                     visited[j] = True
                     self.logger.debug(f"[语义聚类] 发现相似本体组: {ontology_groups[i][0]['name']} <-> {ontology_groups[j][0]['name']} (相似度: {similarity:.3f})")
@@ -154,7 +154,7 @@ class OntologyDeduplicator:
         Returns:
             np.ndarray: 嵌入向量数组
         """
-        batch_size = OntologyConfig.EMBEDDING_BATCH_SIZE
+        batch_size = Config.EMBEDDING_BATCH_SIZE
         
         if len(texts) <= batch_size:
             return self.embedding_model.encode_batch(texts)
@@ -166,7 +166,7 @@ class OntologyDeduplicator:
         all_embeddings = []
         
         # 使用线程池并发处理批次
-        max_workers = min(len(text_batches), OntologyConfig.MAX_CONCURRENT_EMBEDDING)
+        max_workers = min(len(text_batches), Config.MAX_CONCURRENT_EMBEDDING)
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 提交所有批次任务

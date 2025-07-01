@@ -12,7 +12,7 @@ from typing import List, Dict, Any
 from .llm_model import LLMModel
 from .prompt_manager import PromptManager
 from .retry_utils import retry_with_logging, is_valid_json_response
-from .ontology_config import OntologyConfig
+from config import Config
 
 
 class OntologyMerger:
@@ -73,7 +73,7 @@ class OntologyMerger:
         Returns:
             List[Dict]: 合并后的本体列表
         """
-        max_workers = min(len(merge_groups), 200)  # 合并操作可以使用更高并发
+        max_workers = min(len(merge_groups), Config.MAX_CONCURRENT_LLM)  # 合并操作可以使用更高并发
         self.logger.info(f"[本体合并] 开始并发合并 {len(merge_groups)} 个本体组 (max_workers={max_workers})")
         
         merged_ontologies = []
@@ -146,7 +146,7 @@ class OntologyMerger:
         
         return merged_ontology
     
-    @retry_with_logging(max_retries=OntologyConfig.MAX_MERGE_RETRIES,
+    @retry_with_logging(max_retries=Config.MAX_MERGE_RETRIES,
                        exception_types=(json.JSONDecodeError, ValueError, RuntimeError))
     def _merge_ontology_info(self, ontology_name: str, descriptions: List[str], 
                            relationships: List[str]) -> Dict[str, Any]:

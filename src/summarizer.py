@@ -14,7 +14,7 @@ from .ontology_extractor import OntologyExtractor
 from .ontology_deduplicator import OntologyDeduplicator
 from .ontology_merger import OntologyMerger
 from .cache_manager import CacheManager
-from .ontology_config import OntologyConfig
+from config import Config
 
 
 class OntologySummarizer:

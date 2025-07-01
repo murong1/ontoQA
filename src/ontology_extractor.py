@@ -13,7 +13,7 @@ from typing import List, Dict, Any
 from .llm_model import LLMModel
 from .prompt_manager import PromptManager
 from .retry_utils import retry_with_logging, is_valid_json_response
-from .ontology_config import OntologyConfig
+from config import Config
 
 
 class OntologyExtractor:
@@ -112,7 +112,7 @@ class OntologyExtractor:
         Returns:
             List[Dict]: 抽取的本体列表
         """
-        max_workers = min(len(cluster_data), OntologyConfig.MAX_CONCURRENT_LLM)
+        max_workers = min(len(cluster_data), Config.MAX_CONCURRENT_LLM)
         self.logger.info(f"[本体抽取] 大规模数据，使用并发处理 (max_workers={max_workers})")
         
         all_ontologies = []
@@ -140,7 +140,7 @@ class OntologyExtractor:
         self.logger.info(f"[本体抽取] 并发处理完成，总共抽取到 {len(all_ontologies)} 个原始本体")
         return all_ontologies
     
-    @retry_with_logging(max_retries=OntologyConfig.MAX_EXTRACTION_RETRIES,
+    @retry_with_logging(max_retries=Config.MAX_EXTRACTION_RETRIES,
                        exception_types=(json.JSONDecodeError, ValueError, RuntimeError))
     def _extract_from_single_cluster(self, cluster_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """

@@ -6,6 +6,10 @@
 
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 
 class Config:
@@ -16,7 +20,7 @@ class Config:
     DATASET = "musique"
     DEFAULT_CORPUS_PATH = "datasets/"+DATASET+"/Corpus.json"
     DEFAULT_QUESTIONS_PATH = "datasets/"+DATASET+"/Questions.json"
-    
+    DEFAULT_CORPUS_PATH = "datasets/musique/test_corpus_100.json"
     # 聚类配置
     DEFAULT_N_CLUSTERS = 5   # 默认聚类数，实际运行时会根据文档数量动态调整为文档数的1/5到1/10
 
@@ -25,8 +29,8 @@ class Config:
     
     # 问答LLM配置
     QUESTION_LLM_PROVIDER = "openai"  # 或 "local"
-    QUESTION_LLM_API_URL = "https://chatapi.zjt66.top/v1"
-    QUESTION_LLM_API_KEY = "sk-d2JVZ12Td33eVv54a5ykpuj2UttHMepiN3P69JRRxwRbSVWL"
+    QUESTION_LLM_API_URL = os.getenv("LLM_API_URL", "https://chatapi.zjt66.top/v1")
+    QUESTION_LLM_API_KEY = os.getenv("LLM_API_KEY")
     QUESTION_LLM_MODEL = "gpt-4o-mini"
     QUESTION_LLM_MAX_TOKENS = 50
     QUESTION_LLM_MAX_WORKERS = 200
@@ -38,8 +42,8 @@ class Config:
     
     # 本体总结LLM配置
     SUMMARY_LLM_PROVIDER = "openai"
-    SUMMARY_LLM_API_URL = "https://chatapi.zjt66.top/v1"
-    SUMMARY_LLM_API_KEY = "sk-d2JVZ12Td33eVv54a5ykpuj2UttHMepiN3P69JRRxwRbSVWL"
+    SUMMARY_LLM_API_URL = os.getenv("LLM_API_URL", "https://chatapi.zjt66.top/v1")
+    SUMMARY_LLM_API_KEY = os.getenv("LLM_API_KEY")
     SUMMARY_LLM_MODEL = "gpt-4o-mini"
     SUMMARY_LLM_MAX_TOKENS = 2000
     SUMMARY_LLM_MAX_WORKERS = 300
@@ -52,16 +56,28 @@ class Config:
     # Embedding配置
     EMBEDDING_PROVIDER = "local"  # 或 "api"
     EMBEDDING_API_URL = "http://localhost:8000/v1/embeddings"
-    EMBEDDING_API_KEY = "EMPTY"
+    EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "EMPTY")
     EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
     EMBEDDING_BATCH_SIZE = 32
     EMBEDDING_MAX_LENGTH = 512
     EMBEDDING_TIMEOUT = 180  # API请求超时时间（秒）
     EMBEDDING_MAX_WORKERS = 5  # 并行处理的工作线程数
     
+    # 本体处理配置（合并自ontology_config.py）
+    MAX_EXTRACTION_RETRIES = 20
+    MAX_MERGE_RETRIES = 10
+    MAX_CONCURRENT_LLM = 200
+    MAX_CONCURRENT_EMBEDDING = 3
+    SIMILARITY_THRESHOLD = 0.85
+    SIMILARITY_BATCH_SIZE = 1000
+    ONTOLOGY_CACHE_DIR = "cache/ontologies"
+    
     # 输出配置
     DEFAULT_OUTPUT_DIR = "results"
     LOG_FILE = "experiment.log"
+    
+    # 缓存配置
+    CACHE_DIR = "cache"
     
     @classmethod
     def get_config(cls) -> Dict[str, Any]:

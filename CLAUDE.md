@@ -14,11 +14,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 代码修改应确保整体性，测试时使用最新代码
 - 不需要配置安全性和内存优化
 
-## 数据集
-- 示例语料库：`datasets/musique/test_corpus_100.json`
-- 问题集：`datasets/musique/test_questions_20.json`
-
-## 常用命令
+## TODO
+[ ] 修改prompt，支持提取父子关系
+[] 优化提取失败后的重试
+[] 借鉴25年论文本体合并
 
 ### 运行实验
 ```bash

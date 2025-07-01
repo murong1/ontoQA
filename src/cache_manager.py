@@ -11,7 +11,7 @@ import logging
 import numpy as np
 from typing import Dict, List, Any, Optional
 from datetime import datetime
-from .ontology_config import OntologyConfig
+from config import Config
 
 
 class CacheManager:
@@ -26,7 +26,7 @@ class CacheManager:
         """
         self.logger = logging.getLogger(__name__)
         self.output_dir = output_dir
-        self.cache_dir = os.path.join(output_dir, OntologyConfig.CACHE_DIR, OntologyConfig.ONTOLOGY_CACHE_DIR)
+        self.cache_dir = os.path.join(output_dir, Config.CACHE_DIR, Config.ONTOLOGY_CACHE_DIR)
         os.makedirs(self.cache_dir, exist_ok=True)
     
     def generate_cluster_signature(self, clusters: Dict[int, List[Dict[str, Any]]]) -> str:
@@ -166,7 +166,7 @@ class CacheManager:
                 }
             },
             'stage2_deduplication': {
-                'similarity_threshold': OntologyConfig.SIMILARITY_THRESHOLD,
+                'similarity_threshold': Config.SIMILARITY_THRESHOLD,
                 'ontologies_before': len(raw_ontologies),
                 'ontologies_after': len(merged_ontologies),
                 'duplicates_removed': len(raw_ontologies) - len(merged_ontologies)
