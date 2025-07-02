@@ -20,15 +20,17 @@ from config import Config
 class OntologySummarizer:
     """两阶段本体处理器（模块化重构版本）"""
     
-    def __init__(self, output_dir: str = "results"):
+    def __init__(self, output_dir: str = "results", run_dir: str = None):
         """
         初始化总结器
         
         Args:
             output_dir: 输出目录，用于保存本体生成详情
+            run_dir: 运行目录，优先使用此目录保存详情文件
         """
         self.logger = logging.getLogger(__name__)
         self.output_dir = output_dir
+        self.run_dir = run_dir
         
         # 初始化各个组件
         self.extractor = OntologyExtractor()
@@ -71,7 +73,7 @@ class OntologySummarizer:
         compatible_result = self.merger.convert_to_compatible_format(merged_ontologies)
         
         # 保存处理详情
-        self.cache_manager.save_processing_details(clusters, raw_ontologies, merged_ontologies)
+        self.cache_manager.save_processing_details(clusters, raw_ontologies, merged_ontologies, self.run_dir)
         
         self.logger.info(f"[本体处理] 完成处理，最终得到 {len(merged_ontologies)} 个独特本体")
         
@@ -463,7 +465,7 @@ class OntologySummarizer:
             merged_ontologies: 合并后的本体列表
         """
         # 重定向到缓存管理器
-        self.cache_manager.save_processing_details(original_clusters, raw_ontologies, merged_ontologies)
+        self.cache_manager.save_processing_details(original_clusters, raw_ontologies, merged_ontologies, self.run_dir)
     
     def get_ontology_stats(self, summaries: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
         """

@@ -9,6 +9,7 @@ import json
 import logging
 import concurrent.futures
 from typing import List, Dict, Any
+from tqdm import tqdm
 from .llm_model import LLMModel
 from .prompt_manager import PromptManager
 from .retry_utils import retry_with_logging, is_valid_json_response
@@ -85,16 +86,29 @@ class OntologyMerger:
                 for group in merge_groups
             }
             
-            # 收集合并结果
-            for future in concurrent.futures.as_completed(future_to_group):
-                group = future_to_group[future]
+            # 使用进度条收集合并结果
+            with tqdm(total=len(merge_groups), desc="合并本体组", unit="组", position=0, leave=True) as pbar:
                 try:
-                    merged_ontology = future.result()
-                    merged_ontologies.append(merged_ontology)
-                    self.logger.info(f"[本体合并] 成功合并 {len(group)} 个本体: {merged_ontology['name']}")
-                except Exception as e:
-                    self.logger.error(f"[本体合并] 合并本体组失败: {e}")
-                    raise RuntimeError(f"本体组合并失败: {e}") from e
+                    for future in concurrent.futures.as_completed(future_to_group):
+                        group = future_to_group[future]
+                        try:
+                            merged_ontology = future.result()
+                            merged_ontologies.append(merged_ontology)
+                            # 使用tqdm.write避免干扰进度条
+                            tqdm.write(f"[本体合并] 成功合并 {len(group)} 个本体: {merged_ontology['name']}")
+                            pbar.update(1)
+                            pbar.set_postfix({"最新": merged_ontology['name'][:20]})
+                        except Exception as e:
+                            tqdm.write(f"[ERROR] [本体合并] 合并本体组失败: {e}")
+                            pbar.update(1)
+                            raise RuntimeError(f"本体组合并失败: {e}") from e
+                except KeyboardInterrupt:
+                    pbar.close()
+                    tqdm.write("[WARNING] [本体合并] 用户中断操作")
+                    # 取消所有未完成的任务
+                    for future in future_to_group.keys():
+                        future.cancel()
+                    raise
         
         return merged_ontologies
     

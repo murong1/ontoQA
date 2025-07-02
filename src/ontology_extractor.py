@@ -325,7 +325,7 @@ class OntologyExtractor:
     
     def _validate_relation_format(self, relation_text: str, source_cluster: int, ontology_index: int, rel_index: int):
         """
-        验证关系字符串必须符合 "Subject -> Predicate -> Object" 格式
+        验证关系字符串必须符合 "Subject -> Predicate -> Object" 格式，且谓词必须精确
         """
         # 验证是否符合 "Subject -> Predicate -> Object" 格式
         parts = re.split(r'\s*->\s*', relation_text)
@@ -349,4 +349,17 @@ class OntologyExtractor:
         if subject == predicate or predicate == obj or subject == obj:
             raise ValueError(f"聚类 {source_cluster} 本体 {ontology_index} 关系 {rel_index} "
                            f"Subject、Predicate、Object必须各不相同: {relation_text}")
+        
+        # 验证谓词不能是模糊的关系
+        forbidden_predicates = [
+            "related to", "relates to", "associated with", "connected to", 
+            "linked to", "relevant to", "pertains to", "concerns"
+        ]
+        
+        predicate_lower = predicate.lower()
+        for forbidden in forbidden_predicates:
+            if forbidden in predicate_lower:
+                raise ValueError(f"聚类 {source_cluster} 本体 {ontology_index} 关系 {rel_index} "
+                               f"不允许使用模糊的谓词 '{predicate}'。请使用更精确的语义关系，"
+                               f"如: contains, requires, produces, transforms, enables, depends on 等。")
     

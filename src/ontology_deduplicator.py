@@ -10,6 +10,7 @@ import concurrent.futures
 import numpy as np
 from typing import List, Dict, Any
 from collections import defaultdict
+from tqdm import tqdm
 from .embedding_model import EmbeddingModel
 from config import Config
 
@@ -157,7 +158,7 @@ class OntologyDeduplicator:
         batch_size = Config.EMBEDDING_BATCH_SIZE
         
         if len(texts) <= batch_size:
-            return self.embedding_model.encode_batch(texts)
+            return self.embedding_model.encode_batch(texts, verbose=False)
         
         self.logger.info(f"[嵌入计算] 开始并发计算 {len(texts)} 个文本的嵌入向量")
         
@@ -171,21 +172,32 @@ class OntologyDeduplicator:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 提交所有批次任务
             future_to_batch = {
-                executor.submit(self.embedding_model.encode_batch, batch): i
+                executor.submit(self.embedding_model.encode_batch, batch, False): i
                 for i, batch in enumerate(text_batches)
             }
             
-            # 收集结果（保持顺序）
+            # 使用进度条收集结果（保持顺序）
             batch_results = [None] * len(text_batches)
-            for future in concurrent.futures.as_completed(future_to_batch):
-                batch_idx = future_to_batch[future]
+            with tqdm(total=len(text_batches), desc="本体向量化", unit="批次", position=2, leave=False) as pbar:
                 try:
-                    batch_embeddings = future.result()
-                    batch_results[batch_idx] = batch_embeddings
-                    self.logger.debug(f"[嵌入计算] 批次 {batch_idx + 1}/{len(text_batches)} 完成")
-                except Exception as e:
-                    self.logger.error(f"[嵌入计算] 批次 {batch_idx + 1} 失败: {e}")
-                    raise RuntimeError(f"嵌入计算批次 {batch_idx + 1} 失败: {e}") from e
+                    for future in concurrent.futures.as_completed(future_to_batch):
+                        batch_idx = future_to_batch[future]
+                        try:
+                            batch_embeddings = future.result()
+                            batch_results[batch_idx] = batch_embeddings
+                            pbar.update(1)
+                            pbar.set_postfix({"批次": f"{batch_idx + 1}/{len(text_batches)}"})
+                        except Exception as e:
+                            tqdm.write(f"[ERROR] [嵌入计算] 批次 {batch_idx + 1} 失败: {e}")
+                            pbar.update(1)
+                            raise RuntimeError(f"嵌入计算批次 {batch_idx + 1} 失败: {e}") from e
+                except KeyboardInterrupt:
+                    pbar.close()
+                    tqdm.write("[WARNING] [嵌入计算] 用户中断操作")
+                    # 取消所有未完成的任务
+                    for future in future_to_batch.keys():
+                        future.cancel()
+                    raise
         
         # 合并所有批次结果
         for batch_result in batch_results:

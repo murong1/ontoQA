@@ -19,6 +19,7 @@ from queue import Queue, Empty
 import threading
 from sentence_transformers import SentenceTransformer
 from modelscope import snapshot_download
+from tqdm import tqdm
 
 
 class EmbeddingModel:
@@ -319,12 +320,13 @@ class EmbeddingModel:
             self.logger.debug(f"[嵌入模型] 响应结构: {json.dumps(response, indent=2)[:500]}...")
             raise
     
-    def encode_batch(self, texts: List[str]) -> np.ndarray:
+    def encode_batch(self, texts: List[str], verbose: bool = True) -> np.ndarray:
         """
         高性能批量编码文本（智能批处理+错误恢复）
         
         Args:
             texts: 文本列表
+            verbose: 是否输出详细日志
             
         Returns:
             np.ndarray: embedding矩阵
@@ -340,16 +342,17 @@ class EmbeddingModel:
         
         truncated_texts = [self._truncate_text(text) for text in texts]
         
-        self.logger.info(f"[嵌入模型] 使用自适应批次处理 {len(truncated_texts)} 个文本")
+        if verbose:
+            self.logger.info(f"[嵌入模型] 使用自适应批次处理 {len(truncated_texts)} 个文本")
         
         if self.provider == 'api':
-            return self._process_batches_with_recovery(truncated_texts)
+            return self._process_batches_with_recovery(truncated_texts, verbose)
         elif self.provider == 'local':
-            return self._process_local_batches(truncated_texts)
+            return self._process_local_batches(truncated_texts, verbose)
         else:
             raise NotImplementedError(f"Provider {self.provider} not implemented")
     
-    def _process_batches_with_recovery(self, texts: List[str]) -> np.ndarray:
+    def _process_batches_with_recovery(self, texts: List[str], verbose: bool = True) -> np.ndarray:
         """
         智能批处理+错误恢复
         
@@ -474,7 +477,40 @@ class EmbeddingModel:
         
         return recovered_results
     
-    def _process_local_batches(self, texts: List[str]) -> np.ndarray:
+    def _encode_with_progress(self, texts: List[str]) -> np.ndarray:
+        """
+        带进度条的本地模型编码
+        
+        Args:
+            texts: 文本列表
+            
+        Returns:
+            np.ndarray: embedding矩阵
+        """
+        all_embeddings = []
+        
+        # 手动分批处理以显示进度
+        with tqdm(total=len(texts), desc="文档向量化", unit="docs", position=1, leave=False) as pbar:
+            for i in range(0, len(texts), self.batch_size):
+                batch_texts = texts[i:i + self.batch_size]
+                
+                # 处理当前批次
+                batch_embeddings = self.local_model.encode(
+                    batch_texts,
+                    batch_size=self.batch_size,
+                    show_progress_bar=False,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True
+                )
+                
+                all_embeddings.append(batch_embeddings)
+                pbar.update(len(batch_texts))
+                pbar.set_postfix({"批次": f"{i//self.batch_size + 1}/{(len(texts) + self.batch_size - 1)//self.batch_size}"})
+        
+        # 合并所有批次的结果
+        return np.vstack(all_embeddings)
+
+    def _process_local_batches(self, texts: List[str], verbose: bool = True) -> np.ndarray:
         """
         本地模型批处理
         
@@ -487,19 +523,24 @@ class EmbeddingModel:
         if self.local_model is None:
             raise RuntimeError("Local model not initialized")
         
-        self.logger.info(f"[嵌入模型] 使用本地模型处理 {len(texts)} 个文本")
+        if verbose:
+            self.logger.info(f"[嵌入模型] 使用本地模型处理 {len(texts)} 个文本")
         
         try:
             start_time = time.time()
             
-            # 使用sentence-transformers直接批处理
-            embeddings = self.local_model.encode(
-                texts,
-                batch_size=self.batch_size,
-                show_progress_bar=True,
-                convert_to_numpy=True,
-                normalize_embeddings=True  # 归一化embedding向量
-            )
+            # 对于大量文本使用自定义进度条
+            if len(texts) > 1000:
+                embeddings = self._encode_with_progress(texts)
+            else:
+                # 小量文本直接处理，不显示进度条
+                embeddings = self.local_model.encode(
+                    texts,
+                    batch_size=self.batch_size,
+                    show_progress_bar=False,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True  # 归一化embedding向量
+                )
             
             latency = time.time() - start_time
             
@@ -508,8 +549,9 @@ class EmbeddingModel:
                 self._success_count += 1
                 self._total_latency += latency
             
-            self.logger.info(f"[嵌入模型] 本地处理完成: shape={embeddings.shape}, "
-                           f"time={latency:.2f}s, avg_time_per_text={latency/len(texts):.4f}s")
+            if verbose:
+                self.logger.info(f"[嵌入模型] 本地处理完成: shape={embeddings.shape}, "
+                               f"time={latency:.2f}s, avg_time_per_text={latency/len(texts):.4f}s")
             
             return embeddings
             

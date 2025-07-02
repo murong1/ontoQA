@@ -41,7 +41,7 @@ class TextClusterer:
     def __init__(self, n_clusters: int = 5, output_dir: str = "results", 
                  min_cluster_size: Optional[int] = None, max_cluster_size: Optional[int] = None,
                  balanced_clustering: bool = False, use_gpu: bool = False, 
-                 n_jobs: int = -1, algorithm: str = "auto"):
+                 n_jobs: int = -1, algorithm: str = "auto", run_dir: Optional[str] = None):
         """
         初始化聚类器
         
@@ -54,10 +54,11 @@ class TextClusterer:
             use_gpu: 是否使用GPU加速（需要安装cuml）
             n_jobs: CPU并行任务数，-1表示使用所有核心
             algorithm: 聚类算法 ("kmeans", "minibatch", "faiss", "auto")
+            run_dir: 运行目录，用于保存聚类详情（优先于output_dir）
         """
 
         self.n_clusters = n_clusters
-        self.output_dir = output_dir
+        self.output_dir = run_dir if run_dir else output_dir
         self.min_cluster_size = min_cluster_size
         self.max_cluster_size = max_cluster_size
         self.balanced_clustering = balanced_clustering
@@ -111,9 +112,9 @@ class TextClusterer:
                 clusters[label] = []
             clusters[label].append(documents[i])
         
-        # 记录聚类统计
-        for cluster_id, docs in clusters.items():
-            self.logger.info(f"[聚类] 聚类 {cluster_id}: {len(docs)} 个文档")
+        # 记录聚类统计（简化格式）
+        cluster_sizes = [f"{cluster_id}({len(docs)})" for cluster_id, docs in sorted(clusters.items())]
+        self.logger.info(f"[聚类] 聚类分布: {', '.join(cluster_sizes)}")
         
         # 保存聚类详情
         self._save_clustering_details(documents, clusters, cluster_labels)
@@ -205,10 +206,12 @@ class TextClusterer:
             
             clustering_details['clusters'][int(cluster_id)] = cluster_info
         
-        # 生成文件名（包含时间戳）
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"clustering_details_{timestamp}.json"
-        filepath = os.path.join(self.output_dir, filename)
+        # 创建debug子目录并保存详情文件
+        debug_dir = os.path.join(self.output_dir, "debug")
+        os.makedirs(debug_dir, exist_ok=True)
+        
+        filename = "clustering_details.json"
+        filepath = os.path.join(debug_dir, filename)
         
         # 保存到文件
         try:

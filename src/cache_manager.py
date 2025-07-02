@@ -137,7 +137,7 @@ class CacheManager:
     
     def save_processing_details(self, original_clusters: Dict[int, List[Dict[str, Any]]], 
                                raw_ontologies: List[Dict[str, Any]], 
-                               merged_ontologies: List[Dict[str, Any]]) -> None:
+                               merged_ontologies: List[Dict[str, Any]], run_dir: str = None) -> None:
         """
         保存本体处理详情
         
@@ -145,9 +145,12 @@ class CacheManager:
             original_clusters: 原始聚类结果
             raw_ontologies: 原始本体列表
             merged_ontologies: 合并后的本体列表
+            run_dir: 运行目录，优先使用此目录而非默认输出目录
         """
-        # 确保输出目录存在
-        os.makedirs(self.output_dir, exist_ok=True)
+        # 确定输出目录
+        output_dir = run_dir if run_dir else self.output_dir
+        debug_dir = os.path.join(output_dir, "debug")
+        os.makedirs(debug_dir, exist_ok=True)
         
         # 构建详细的处理信息
         processing_details = {
@@ -184,9 +187,8 @@ class CacheManager:
         }
         
         # 生成文件名
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"ontology_processing_details_{timestamp}.json"
-        filepath = os.path.join(self.output_dir, filename)
+        filename = "ontology_processing_details.json"
+        filepath = os.path.join(debug_dir, filename)
         
         # 保存到文件
         try:

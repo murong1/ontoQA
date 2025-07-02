@@ -38,36 +38,7 @@ class JSONToOWLConverter:
             self.namespace_prefix: namespace_uri
         }
         
-        # 关系映射：从自然语言关系到标准属性名（支持多种变体）
-        self.relation_mapping = {
-            "governs": "governs",
-            "affects": "affects", 
-            "varies by": "variesBy",
-            "vary by": "variesBy",
-            "enforces": "enforces",
-            "enforce": "enforces",
-            "influenced by": "influencedBy",
-            "influences": "influences",
-            "influence": "influences",
-            "relates to": "relatesTo",
-            "relate to": "relatesTo",
-            "derive from": "derivesFrom",
-            "derives from": "derivesFrom",
-            "derived from": "derivesFrom",
-            "include": "includes",
-            "includes": "includes",
-            "subject to": "subjectTo",
-            "prohibited from": "prohibitedFrom",
-            "prohibit from": "prohibitedFrom",
-            "regulated by": "regulatedBy",
-            "regulate by": "regulatedBy",
-            "associated with": "associatedWith",
-            "associate with": "associatedWith",
-            "is type of": "isTypeOf",
-            "type of": "isTypeOf",
-            "contains": "contains",
-            "contain": "contains"
-        }
+        # 移除关系映射，直接使用驼峰转换
         
         # 用于缓存已清理的名称，确保同一概念映射到同一类
         self._name_cache = {}
@@ -129,7 +100,7 @@ class JSONToOWLConverter:
             self.logger.info(f"解析到 {len(ontologies)} 个本体概念")
             
             # 提取类和属性信息
-            classes, properties, relations = self._extract_owl_elements(ontologies)
+            classes, properties, object_relations, subclass_relations = self._extract_owl_elements(ontologies)
             
             # 设置默认格式
             if formats is None:
@@ -137,21 +108,19 @@ class JSONToOWLConverter:
             elif 'all' in formats:
                 formats = ['turtle', 'xml']
             
-            # 生成文件名
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
+            # 生成简洁的文件名
             result = {}
             
             # 按需求生成文件
             if 'turtle' in formats:
-                turtle_file = output_path / f"ontoqa_ontology_{timestamp}.ttl"
-                self._generate_turtle(classes, properties, relations, str(turtle_file), metadata)
+                turtle_file = output_path / "ontology.ttl"
+                self._generate_turtle(classes, properties, object_relations, subclass_relations, str(turtle_file), metadata)
                 result['turtle'] = str(turtle_file)
                 self.logger.info(f"  Turtle格式: {turtle_file}")
             
             if 'xml' in formats:
-                owl_xml_file = output_path / f"ontoqa_ontology_{timestamp}.owl"
-                self._generate_owl_xml(classes, properties, relations, str(owl_xml_file), metadata)
+                owl_xml_file = output_path / "ontology.owl"
+                self._generate_owl_xml(classes, properties, object_relations, subclass_relations, str(owl_xml_file), metadata)
                 result['owl_xml'] = str(owl_xml_file)
                 self.logger.info(f"  OWL/XML格式: {owl_xml_file}")
             
@@ -162,19 +131,21 @@ class JSONToOWLConverter:
             self.logger.error(f"生成OWL文件时出现错误: {e}")
             raise
     
-    def _extract_owl_elements(self, ontologies: List[Dict[str, Any]]) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Set[str]]], List[Tuple[str, str, str]]]:
+    def _extract_owl_elements(self, ontologies: List[Dict[str, Any]]) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Set[str]]], List[Tuple[str, str, str]], List[Tuple[str, str, str]]]:
         """
         从JSON本体中提取OWL元素
         
         Returns:
-            Tuple: (classes, properties, relations)
+            Tuple: (classes, properties, object_relations, subclass_relations)
                 - classes: {class_name: {description, source_info}}
                 - properties: {property_name: {domains, ranges}}
-                - relations: [(subject, predicate, object)]
+                - object_relations: [(subject, predicate, object)] - OTHER类型的关系
+                - subclass_relations: [(subclass, 'subClassOf', superclass)] - TYPE类型的关系
         """
         classes = {}
         properties = {}
-        relations = []
+        object_relations = []  # OTHER类型的关系
+        subclass_relations = []  # TYPE类型的关系
         
         for ontology in ontologies:
             class_name = self._sanitize_name(ontology['ontology_name'])
@@ -200,20 +171,65 @@ class JSONToOWLConverter:
             
             # 处理关系
             for relationship in ontology.get('relationships', []):
-                subject, predicate, obj = self._parse_relationship(relationship)
+                subject, predicate, obj, rel_type = self._parse_relationship(relationship)
                 if subject and predicate and obj:
-                    relations.append((subject, predicate, obj))
-                    
-                    # 收集属性信息
-                    if predicate not in properties:
-                        properties[predicate] = {'domains': set(), 'ranges': set()}
-                    
-                    properties[predicate]['domains'].add(subject)
-                    properties[predicate]['ranges'].add(obj)
+                    # 根据关系类型分类
+                    if rel_type == 'TYPE':
+                        subclass_relations.append((subject, predicate, obj))
+                    else:  # OTHER类型
+                        object_relations.append((subject, predicate, obj))
+                        
+                        # 只为OTHER类型的关系收集属性信息
+                        if predicate not in properties:
+                            properties[predicate] = {'domains': set(), 'ranges': set()}
+                        
+                        properties[predicate]['domains'].add(subject)
+                        properties[predicate]['ranges'].add(obj)
+                        
+            # 处理关系中提到但未定义的类
+            for relationship in ontology.get('relationships', []):
+                subject, predicate, obj, rel_type = self._parse_relationship(relationship)
+                if subject and predicate and obj:
+                    # 确保所有关系中的类都被定义
+                    for class_name in [subject, obj]:
+                        if class_name not in classes:
+                            classes[class_name] = {
+                                'description': f"{class_name}类（从关系中推断）",
+                                'original_name': class_name,
+                                'document_count': 0,
+                                'cluster_id': -999
+                            }
         
-        self.logger.info(f"提取到 {len(classes)} 个类, {len(properties)} 个属性, {len(relations)} 个关系")
+        self.logger.info(f"提取到 {len(classes)} 个类, {len(properties)} 个对象属性, {len(object_relations)} 个对象关系, {len(subclass_relations)} 个子类关系")
         
-        return classes, properties, relations
+        return classes, properties, object_relations, subclass_relations
+    
+    def _to_camel_case(self, text: str) -> str:
+        """
+        将文本转换为驼峰命名（首字母小写）
+        例如: "is type of" -> "isTypeOf"
+             "influences" -> "influences"
+             "regulated by" -> "regulatedBy"
+        """
+        if not text or not text.strip():
+            return "unknownRelation"
+        
+        # 移除特殊字符，保留字母数字和空格
+        cleaned = re.sub(r'[^\w\s]', '', text.strip())
+        
+        # 按空格分词
+        words = cleaned.split()
+        
+        if not words:
+            return "unknownRelation"
+        
+        # 第一个单词小写，后续单词首字母大写
+        camel_case = words[0].lower()
+        for word in words[1:]:
+            if word:  # 跳过空字符串
+                camel_case += word.capitalize()
+        
+        return camel_case
     
     def _sanitize_name(self, name: str) -> str:
         """
@@ -255,35 +271,51 @@ class JSONToOWLConverter:
         parts = re.split(pattern, description, 1)
         return parts[0].strip() if parts else description.strip()
     
-    def _parse_relationship(self, relationship: str) -> Tuple[str, str, str]:
+    def _parse_relationship(self, relationship_str: str) -> Tuple[str, str, str, str]:
         """
-        解析关系字符串 "Subject -> Predicate -> Object"
+        解析关系字符串，格式为: "{'relation': 'Subject -> Predicate -> Object', 'type': 'TYPE/OTHER'}"
         
         Returns:
-            Tuple: (subject, predicate, object) 或 (None, None, None) 如果解析失败
+            Tuple: (subject, predicate, object, relation_type) 或 (None, None, None, None) 如果解析失败
         """
-        # 支持带空格或不带空格的箭头分隔符
-        parts = re.split(r'\s*->\s*', relationship)
-        if len(parts) != 3:
-            self.logger.warning(f"无法解析关系: {relationship}")
-            return None, None, None
-        
-        subject = self._sanitize_name(parts[0].strip())
-        predicate_raw = parts[1].strip()
-        obj = self._sanitize_name(parts[2].strip())
-        
-        # 映射谓词到标准名称，先清理空格再匹配
-        predicate_key = predicate_raw.lower().strip()
-        predicate = self.relation_mapping.get(predicate_key, 
-                                            self._sanitize_name(predicate_raw))
-        # 确保谓词是camelCase（首字母小写）
-        if predicate and predicate[0].isupper():
-            predicate = predicate[0].lower() + predicate[1:]
-        
-        return subject, predicate, obj
+        try:
+            # 使用ast.literal_eval安全地解析字符串形式的字典
+            import ast
+            rel_dict = ast.literal_eval(relationship_str)
+            
+            if not isinstance(rel_dict, dict) or 'relation' not in rel_dict or 'type' not in rel_dict:
+                self.logger.warning(f"关系格式错误: {relationship_str}")
+                return None, None, None, None
+                
+            relation = rel_dict['relation']
+            relation_type = rel_dict['type']
+            
+            # 解析关系字符串 "Subject -> Predicate -> Object"
+            parts = re.split(r'\s*->\s*', relation)
+            if len(parts) != 3:
+                self.logger.warning(f"无法解析关系: {relation}")
+                return None, None, None, None
+            
+            subject = self._sanitize_name(parts[0].strip())
+            predicate_raw = parts[1].strip()
+            obj = self._sanitize_name(parts[2].strip())
+            
+            # 对于TYPE类型，谓词固定为subClassOf
+            if relation_type == 'TYPE':
+                predicate = 'subClassOf'
+            else:
+                # 其他关系转换为驼峰命名
+                predicate = self._to_camel_case(predicate_raw)
+            
+            return subject, predicate, obj, relation_type
+            
+        except Exception as e:
+            self.logger.warning(f"解析关系时出错: {relationship_str}, 错误: {e}")
+            return None, None, None, None
     
     def _generate_turtle(self, classes: Dict[str, Dict], properties: Dict[str, Set], 
-                        relations: List[Tuple[str, str, str]], output_file: str, metadata: Dict):
+                        object_relations: List[Tuple[str, str, str]], subclass_relations: List[Tuple[str, str, str]], 
+                        output_file: str, metadata: Dict):
         """
         生成Turtle格式文件
         """
@@ -358,15 +390,21 @@ class JSONToOWLConverter:
                 else:
                     f.write("    rdfs:range owl:Thing .\n\n")
             
-            # 关系实例
-            f.write("# 关系实例\n")
-            for subject, predicate, obj in relations:
+            # 子类关系
+            f.write("# 子类关系\n")
+            for subject, predicate, obj in subclass_relations:
+                f.write(f"{self.namespace_prefix}:{subject} rdfs:subClassOf {self.namespace_prefix}:{obj} .\n")
+            
+            # 对象关系实例
+            f.write("\n# 对象关系\n")
+            for subject, predicate, obj in object_relations:
                 f.write(f"{self.namespace_prefix}:{subject} {self.namespace_prefix}:{predicate} {self.namespace_prefix}:{obj} .\n")
         
         self.logger.info(f"Turtle文件生成完成: {output_file}")
     
     def _generate_owl_xml(self, classes: Dict[str, Dict], properties: Dict[str, Set], 
-                         relations: List[Tuple[str, str, str]], output_file: str, metadata: Dict):
+                         object_relations: List[Tuple[str, str, str]], subclass_relations: List[Tuple[str, str, str]], 
+                         output_file: str, metadata: Dict):
         """
         生成OWL/XML格式文件
         """
@@ -464,9 +502,16 @@ class JSONToOWLConverter:
                 
                 f.write('    </owl:ObjectProperty>\n\n')
             
-            # 关系实例（作为公理）
-            f.write('    <!-- 关系实例公理 -->\n')
-            for i, (subject, predicate, obj) in enumerate(relations):
+            # 子类关系
+            f.write('    <!-- 子类关系 -->\n')
+            for subject, predicate, obj in subclass_relations:
+                f.write(f'    <rdf:Description rdf:about="#{subject}">\n')
+                f.write(f'        <rdfs:subClassOf rdf:resource="#{obj}"/>\n')
+                f.write('    </rdf:Description>\n\n')
+            
+            # 对象关系
+            f.write('    <!-- 对象关系 -->\n')
+            for subject, predicate, obj in object_relations:
                 f.write(f'    <rdf:Description rdf:about="#{subject}">\n')
                 f.write(f'        <{predicate} rdf:resource="#{obj}"/>\n')
                 f.write('    </rdf:Description>\n\n')

@@ -40,6 +40,20 @@ Relationship Types:
 - **TYPE**: Hierarchical classification relationships, use unified "is type of" format (e.g., "Dog -> is type of -> Animal")
 - **OTHER**: non-is-a semantic relationships between types (e.g., "Algorithm -> used in -> Machine Learning")
 
+**IMPORTANT RULES FOR RELATIONSHIPS**:
+1. **BE SPECIFIC**: Every relationship must have a clear, precise semantic meaning
+2. **FORBIDDEN PREDICATES**: DO NOT use vague predicates like:
+   - "related to", "relates to", "associated with", "connected to", "linked to"
+   - These are TOO GENERAL and provide no semantic value
+3. **REQUIRED**: Use specific predicates that clearly express the nature of the relationship:
+   - Action-based: "produces", "consumes", "transforms", "generates", "requires"
+   - Structural: "contains", "consists of", "includes", "part of"
+   - Temporal: "precedes", "follows", "occurs during"
+   - Spatial: "located in", "adjacent to", "surrounds"
+   - Functional: "used for", "enables", "supports", "implements"
+   - Causal: "causes", "results in", "depends on", "influences"
+   - Ownership: "belongs to", "owned by", "manages", "controls"
+
 Output format example:
 ```json
 {{
@@ -61,7 +75,7 @@ Output format example:
           "type": "OTHER"
         }},
         {{
-          "relation": "Machine Learning -> uses -> Training Data",
+          "relation": "Machine Learning -> requires -> Training Data",
           "type": "OTHER"
         }}
       ]
@@ -98,6 +112,8 @@ Notes:
 - **Prioritize extracting TYPE relationships** as they are crucial for ontological hierarchies
 - Use structured relationship format with explicit type classification
 - Relationships can include ontology names or other relevant concepts
+- **CRITICAL**: Each relationship predicate must be semantically precise and meaningful
+- **NEVER** use generic predicates like "related to" - always specify HOW things are related
 - Ensure JSON format is correct and parseable by programs
 
 Document Cluster:

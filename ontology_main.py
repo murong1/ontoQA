@@ -97,7 +97,8 @@ def main():
             balanced_clustering=args.balanced_clustering,
             use_gpu=args.use_gpu,
             n_jobs=args.n_jobs,
-            algorithm=args.clustering_algorithm
+            algorithm=args.clustering_algorithm,
+            run_dir=str(run_dir)
         )
         clusters = clusterer.cluster_documents(corpus)
         
@@ -108,13 +109,26 @@ def main():
         
         # 4. 本体总结
         logger.info("[本体生成] 为聚类生成本体总结...")
-        summarizer = OntologySummarizer(output_dir=args.output)
+        summarizer = OntologySummarizer(output_dir=args.output, run_dir=str(run_dir))
         summaries = summarizer.summarize_clusters(clusters)
         logger.info("[本体生成] 本体总结完成")
         
-        # 5. 保存本体总结结果为JSON格式
+        # 5. 创建结构化的输出目录
         output_dir = Path(args.output)
         output_dir.mkdir(exist_ok=True)
+        
+        # 创建子目录结构
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = output_dir / f"run_{timestamp}"
+        run_dir.mkdir(exist_ok=True)
+        
+        # 子目录
+        json_dir = run_dir / "json"
+        txt_dir = run_dir / "txt" 
+        owl_dir = run_dir / "owl"
+        json_dir.mkdir(exist_ok=True)
+        txt_dir.mkdir(exist_ok=True)
+        owl_dir.mkdir(exist_ok=True)
         
         # 构建详细的本体JSON数据
         ontology_data = {
@@ -143,12 +157,12 @@ def main():
             ontology_data["ontologies"].append(ontology_info)
         
         # 保存JSON文件
-        ontology_json_file = output_dir / "ontology_summaries.json"
+        ontology_json_file = json_dir / "ontology_summaries.json"
         with open(ontology_json_file, 'w', encoding='utf-8') as f:
             json.dump(ontology_data, f, ensure_ascii=False, indent=2)
         
         # 同时保存简化的文本版本用于快速查看
-        ontology_txt_file = output_dir / "ontology_summaries.txt"
+        ontology_txt_file = txt_dir / "ontology_summaries.txt"
         with open(ontology_txt_file, 'w', encoding='utf-8') as f:
             f.write("=== 本体总结结果 ===\n\n")
             for ontology in ontology_data["ontologies"]:
@@ -163,14 +177,34 @@ def main():
                 f.write(f"文档数量: {ontology['document_count']}\n")
                 f.write("-" * 50 + "\n\n")
         
+        # 同时在根目录创建最新结果的符号链接
+        latest_json = output_dir / "latest_ontology_summaries.json"
+        latest_txt = output_dir / "latest_ontology_summaries.txt"
+        
+        # 删除旧的符号链接（如果存在）
+        if latest_json.exists() or latest_json.is_symlink():
+            latest_json.unlink()
+        if latest_txt.exists() or latest_txt.is_symlink():
+            latest_txt.unlink()
+            
+        # 创建新的符号链接
+        try:
+            latest_json.symlink_to(ontology_json_file.relative_to(output_dir))
+            latest_txt.symlink_to(ontology_txt_file.relative_to(output_dir))
+        except OSError:
+            # 如果不支持符号链接，则复制文件
+            import shutil
+            shutil.copy2(ontology_json_file, latest_json)
+            shutil.copy2(ontology_txt_file, latest_txt)
+        
         logger.info(f"[本体生成] 本体生成完成。共生成 {len(summaries)} 个本体总结")
         logger.info(f"[本体生成] JSON结果已保存到 {ontology_json_file}")
         logger.info(f"[本体生成] 文本结果已保存到 {ontology_txt_file}")
+        logger.info(f"[本体生成] 最新结果链接: {latest_json}, {latest_txt}")
         
         # 6. OWL转换
         logger.info("[本体生成] 开始将JSON本体转换为OWL格式...")
-        owl_output_dir = output_dir / "onto"
-        owl_output_dir.mkdir(exist_ok=True)
+        owl_output_dir = owl_dir
         
         try:
             owl_converter = JSONToOWLConverter()
@@ -178,9 +212,31 @@ def main():
                 json_file_path=str(ontology_json_file), 
                 output_dir=str(owl_output_dir)
             )
+            
+            # 创建最新OWL文件的符号链接
+            latest_turtle = output_dir / "latest_ontology.ttl"
+            latest_owl = output_dir / "latest_ontology.owl"
+            
+            # 删除旧的符号链接
+            if latest_turtle.exists() or latest_turtle.is_symlink():
+                latest_turtle.unlink()
+            if latest_owl.exists() or latest_owl.is_symlink():
+                latest_owl.unlink()
+            
+            # 创建新的符号链接
+            try:
+                latest_turtle.symlink_to(Path(owl_files['turtle']).relative_to(output_dir))
+                latest_owl.symlink_to(Path(owl_files['owl_xml']).relative_to(output_dir))
+            except OSError:
+                # 如果不支持符号链接，则复制文件
+                import shutil
+                shutil.copy2(owl_files['turtle'], latest_turtle)
+                shutil.copy2(owl_files['owl_xml'], latest_owl)
+            
             logger.info(f"[本体生成] OWL转换完成")
             logger.info(f"[本体生成] Turtle文件: {owl_files['turtle']}")
             logger.info(f"[本体生成] OWL/XML文件: {owl_files['owl_xml']}")
+            logger.info(f"[本体生成] 最新OWL链接: {latest_turtle}, {latest_owl}")
         except Exception as e:
             logger.error(f"[本体生成] OWL转换失败: {str(e)}")
             owl_files = None
@@ -194,12 +250,13 @@ def main():
             print(f"聚类大小限制: {args.min_cluster_size or '自动'} - {args.max_cluster_size}")
             print(f"实际聚类大小: {cluster_stats['min_cluster_size']} - {cluster_stats['max_cluster_size']} (平均: {cluster_stats['avg_cluster_size']:.1f})")
         print(f"本体总结数量: {len(summaries)}")
-        print(f"输出目录: {args.output}")
-        print(f"JSON文件: {ontology_json_file}")
-        print(f"文本文件: {ontology_txt_file}")
+        print(f"本次运行目录: {run_dir}")
+        print(f"最新结果文件:")
+        print(f"  JSON: {latest_json}")
+        print(f"  文本: {latest_txt}")
         if owl_files:
-            print(f"OWL Turtle文件: {owl_files['turtle']}")
-            print(f"OWL XML文件: {owl_files['owl_xml']}")
+            print(f"  Turtle: {latest_turtle}")
+            print(f"  OWL XML: {latest_owl}")
         
     except Exception as e:
         logger.error(f"[本体生成] 任务失败: {str(e)}")

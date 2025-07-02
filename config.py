@@ -17,9 +17,9 @@ class Config:
     MIOASHU = "测试部分"
     
     # 数据配置
-    DATASET = "musique"
-    DEFAULT_CORPUS_PATH = "datasets/"+DATASET+"/Corpus.json"
-    DEFAULT_QUESTIONS_PATH = "datasets/"+DATASET+"/Questions.json"
+    DATASET = "agriculture"
+    DEFAULT_CORPUS_PATH = "datasets/"+DATASET+"/corpus.json"
+    DEFAULT_QUESTIONS_PATH = "datasets/"+DATASET+"/questions.json"
     DEFAULT_CORPUS_PATH = "datasets/musique/test_corpus_100.json"
     # 聚类配置
     DEFAULT_N_CLUSTERS = 5   # 默认聚类数，实际运行时会根据文档数量动态调整为文档数的1/5到1/10
